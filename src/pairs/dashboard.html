@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Statistical Arbitrage | Pairs Trading Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:      #0e0e0e;
+    --bg2:     #161616;
+    --bg3:     #1f1f1f;
+    --border:  #2a2a2a;
+    --text:    #e8e6e0;
+    --muted:   #888780;
+    --dim:     #555450;
+    --green:   #1D9E75;
+    --red:     #E24B4A;
+    --blue:    #4A90D9;
+    --amber:   #D4A847;
+    --purple:  #8B7FD4;
+    --mono:    'IBM Plex Mono', 'Fira Code', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 13px; }
+  .header { border-bottom: 1px solid var(--border); padding: 18px 28px; display: flex; align-items: baseline; gap: 16px; }
+  .header h1 { font-size: 14px; letter-spacing: .08em; font-weight: 500; color: var(--text); }
+  .header span { font-size: 11px; color: var(--muted); }
+  .main { padding: 20px 28px; max-width: 1400px; }
+
+  .pair-tabs { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+  .tab { font-family: var(--mono); font-size: 11px; padding: 5px 14px; border: 1px solid var(--border);
+         border-radius: 20px; cursor: pointer; background: transparent; color: var(--muted);
+         transition: all .15s; letter-spacing: .04em; }
+  .tab.active { background: var(--text); color: var(--bg); border-color: transparent; }
+
+  .params-bar { display: flex; gap: 24px; align-items: center; margin-bottom: 18px;
+                padding: 12px 16px; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap; }
+  .param { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+  .param label { letter-spacing: .04em; }
+  .param input[type=range] { width: 90px; accent-color: var(--blue); }
+  .param .val { color: var(--text); font-weight: 500; min-width: 36px; }
+  .run-btn { margin-left: auto; font-family: var(--mono); font-size: 11px; letter-spacing: .06em;
+             padding: 6px 18px; background: var(--blue); color: #fff; border: none;
+             border-radius: 6px; cursor: pointer; transition: opacity .15s; }
+  .run-btn:hover { opacity: .8; }
+
+  .metrics { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 16px; }
+  .metric { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .metric .lbl { font-size: 10px; color: var(--dim); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
+  .metric .val { font-size: 22px; font-weight: 400; }
+  .metric .sub { font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .pos { color: var(--green); } .neg { color: var(--red); } .neu { color: var(--text); }
+
+  .grid-3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .card-title { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-bottom: 12px; }
+  canvas { display: block; width: 100% !important; }
+
+  .badge { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+  .badge-long  { background: rgba(29,158,117,.15); color: var(--green); }
+  .badge-short { background: rgba(226,75,74,.15);  color: var(--red); }
+  .badge-flat  { background: rgba(136,135,128,.12); color: var(--muted); }
+  .badge-yes   { background: rgba(29,158,117,.15); color: var(--green); }
+  .badge-no    { background: rgba(226,75,74,.15);  color: var(--red); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim);
+       text-align: left; padding: 0 10px 8px 0; border-bottom: 1px solid var(--border); font-weight: 400; }
+  td { padding: 7px 10px 7px 0; border-bottom: 1px solid rgba(42,42,42,.5); color: var(--muted); }
+  td:first-child { color: var(--text); }
+
+  .coint-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 10px; }
+  .coint-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .coint-pair { font-size: 12px; font-weight: 500; color: var(--text); margin-bottom: 8px; }
+  .coint-row  { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+  .coint-val  { color: var(--text); }
+
+  .wf-note { font-size: 10px; color: var(--dim); padding: 10px 14px; background: var(--bg3);
+             border-left: 2px solid var(--border); border-radius: 4px; margin-top: 8px; }
+
+  @media (max-width: 900px) {
+    .metrics { grid-template-columns: repeat(3,1fr); }
+    .grid-3  { grid-template-columns: 1fr; }
+    .coint-grid { grid-template-columns: repeat(2,1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>STATISTICAL ARBITRAGE · PAIRS TRADING</h1>
+  <span>Engle-Granger Cointegration · Rolling Z-score · Walk-Forward Validated</span>
+  <span style="margin-left:auto;color:var(--dim)" id="data-note">simulated data · replace with Bloomberg CSVs</span>
+</div>
+
+<div class="main">
+
+  <!-- Pair Selector -->
+  <div class="pair-tabs">
+    <button class="tab active" data-pair="0">KO / PEP</button>
+    <button class="tab" data-pair="1">XOM / CVX</button>
+    <button class="tab" data-pair="2">GS / MS</button>
+    <button class="tab" data-pair="3">AMZN / TGT</button>
+  </div>
+
+  <!-- Parameter Controls -->
+  <div class="params-bar">
+    <div class="param"><label>ENTRY Z</label><input type="range" id="entry-z" min="1" max="3" step="0.25" value="2"><span class="val" id="entry-z-v">±2.00</span></div>
+    <div class="param"><label>EXIT Z</label><input type="range" id="exit-z" min="0" max="1.5" step="0.25" value="0.5"><span class="val" id="exit-z-v">±0.50</span></div>
+    <div class="param"><label>Z WINDOW</label><input type="range" id="z-win" min="20" max="120" step="10" value="60"><span class="val" id="z-win-v">60d</span></div>
+    <div class="param"><label>COSTS (BPS)</label><input type="range" id="costs" min="0" max="30" step="5" value="10"><span class="val" id="costs-v">10</span></div>
+    <button class="run-btn" id="run-btn">▶ RUN BACKTEST</button>
+  </div>
+
+  <!-- Metrics Row -->
+  <div class="metrics">
+    <div class="metric"><div class="lbl">Current Z-score</div><div class="val" id="m-z">—</div><div class="sub" id="m-signal">—</div></div>
+    <div class="metric"><div class="lbl">CAGR</div><div class="val" id="m-cagr">—</div><div class="sub">annualised</div></div>
+    <div class="metric"><div class="lbl">Sharpe Ratio</div><div class="val" id="m-sharpe">—</div><div class="sub">annualised</div></div>
+    <div class="metric"><div class="lbl">Max Drawdown</div><div class="val" id="m-dd">—</div><div class="sub">peak-to-trough</div></div>
+    <div class="metric"><div class="lbl">Win Rate</div><div class="val" id="m-wr">—</div><div class="sub" id="m-trades">— trades</div></div>
+    <div class="metric"><div class="lbl">Half-life</div><div class="val" id="m-hl">—</div><div class="sub">mean reversion</div></div>
+  </div>
+
+  <!-- Cointegration Summary -->
+  <div class="coint-grid" id="coint-cards"></div>
+
+  <!-- Charts -->
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-title">Z-score · entry / exit bands</div>
+      <canvas id="z-chart" height="180"></canvas>
+    </div>
+    <div class="card">
+      <div class="card-title">Spread distribution</div>
+      <canvas id="hist-chart" height="180"></canvas>
+    </div>
+    <div class="card">
+      <div class="card-title">Price series (normalised)</div>
+      <canvas id="price-chart" height="180"></canvas>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Equity curve (cost-adjusted)</div>
+      <canvas id="eq-chart" height="140"></canvas>
+    </div>
+    <div class="card">
+      <div class="card-title">Drawdown</div>
+      <canvas id="dd-chart" height="140"></canvas>
+    </div>
+  </div>
+
+  <!-- Walk-Forward Results -->
+  <div class="card" style="margin-bottom:10px">
+    <div class="card-title">Walk-forward OOS results</div>
+    <table id="wf-table">
+      <thead><tr><th>Period</th><th>Best Entry Z</th><th>Best Exit Z</th><th>Best Window</th><th>Train Sharpe</th><th>OOS Sharpe</th><th>OOS Return</th><th>OOS Trades</th></tr></thead>
+      <tbody id="wf-body"></tbody>
+    </table>
+    <div class="wf-note">Walk-forward: 5y train → 1y OOS test, rolling. OOS Sharpe is the honest performance estimate. Avoid pairs where OOS Sharpe degrades significantly vs train.</div>
+  </div>
+
+  <!-- Recent Trades -->
+  <div class="card">
+    <div class="card-title">Simulated trade log (recent 8)</div>
+    <table>
+      <thead><tr><th>Entry Date</th><th>Exit Date</th><th>Direction</th><th>Entry Z</th><th>Exit Z</th><th>Days Held</th><th>Net P&L</th></tr></thead>
+      <tbody id="trades-body"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+// ── Data Generation (OU Process) ──────────────────────────────────────────────
+const PAIRS_META = [
+  { label:"KO / PEP",    sector:"Consumer Staples",    kappa:.18, sigma:.06, noise:.018, beta:.88, eg_p:.022, hl:14 },
+  { label:"XOM / CVX",   sector:"Energy Majors",        kappa:.14, sigma:.10, noise:.026, beta:1.05, eg_p:.031, hl:19 },
+  { label:"GS / MS",     sector:"Investment Banks",     kappa:.22, sigma:.09, noise:.030, beta:1.22, eg_p:.018, hl:11 },
+  { label:"AMZN / TGT",  sector:"Retail / Consumer",    kappa:.11, sigma:.14, noise:.038, beta:.74,  eg_p:.048, hl:25 },
+];
+
+const N = 504; // ~2 years of daily data shown
+let charts = {}, currentPair = 0;
+
+function rng(seed) {
+  let s = seed;
+  return () => { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 4294967296; };
+}
+function gauss(r) {
+  let u,v; do { u=r(); } while(!u); do { v=r(); } while(!v);
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+
+function genData(pIdx, entryZ, exitZ, window, costBps) {
+  const p = PAIRS_META[pIdx];
+  const r = rng(pIdx * 137 + 99);
+  const G = () => gauss(r);
+
+  // OU spread
+  const spread = [0];
+  for (let i=1;i<N;i++) spread.push(spread[i-1] + p.kappa*(0 - spread[i-1]) + p.noise*G());
+
+  // Rolling z-score (proper, no look-ahead)
+  const zscore = new Array(N).fill(null);
+  for (let i=window;i<N;i++) {
+    const w = spread.slice(i-window,i);
+    const mu  = w.reduce((a,b)=>a+b)/w.length;
+    const sig = Math.sqrt(w.reduce((a,b)=>a+(b-mu)**2,0)/w.length);
+    zscore[i] = sig > 0 ? (spread[i]-mu)/sig : 0;
+  }
+
+  // Normalised prices
+  const pA = [100], pB = [100];
+  for (let i=1;i<N;i++) {
+    pA.push(pA[i-1]*(1+G()*0.010));
+    pB.push(pA[i]/p.beta + spread[i]*20);
+  }
+  const pA_n = pA.map(v=>v/pA[0]);
+  const pB_n = pB.map(v=>v/pB[0]);
+
+  // Backtest
+  const cost = costBps/10000;
+  const equity = [10000], trades = [];
+  let pos = null;
+  for (let i=1;i<N;i++) {
+    const z = zscore[i];
+    if (z===null) { equity.push(equity[equity.length-1]); continue; }
+    let mtm = 0;
+    if (pos) {
+      const dz = z - zscore[i-1];
+      mtm = (pos.dir==='short'?-dz:dz)*equity[pos.entryI]*0.012;
+    }
+    if (pos) {
+      const days = i-pos.entryI;
+      const shouldExit = (pos.dir==='short'&&z<=exitZ)||(pos.dir==='long'&&z>=-exitZ)||days>=30;
+      if (shouldExit) {
+        const net = equity[equity.length-1]+mtm - cost*equity[pos.entryI];
+        trades.push({entryI:pos.entryI,exitI:i,dir:pos.dir,entryZ:pos.z.toFixed(2),exitZ:z.toFixed(2),days,netPnl:net-equity[pos.entryI],netPct:((net-equity[pos.entryI])/equity[pos.entryI]*100).toFixed(2)});
+        equity.push(net);
+        pos=null; continue;
+      }
+    }
+    if (!pos) {
+      if (z>=entryZ) { pos={dir:'short',entryI:i,z};   equity.push(equity[equity.length-1]-cost*10000); }
+      else if (z<=-entryZ){ pos={dir:'long',entryI:i,z}; equity.push(equity[equity.length-1]-cost*10000); }
+      else equity.push(equity[equity.length-1]+mtm);
+    } else equity.push(equity[equity.length-1]+mtm);
+  }
+
+  // Metrics
+  const eq = equity;
+  const rets = eq.slice(1).map((v,i)=>(v-eq[i])/eq[i]);
+  const mu_r = rets.reduce((a,b)=>a+b)/rets.length;
+  const sd_r = Math.sqrt(rets.reduce((a,b)=>a+(b-mu_r)**2,0)/rets.length);
+  const sharpe = sd_r>0 ? (mu_r/sd_r)*Math.sqrt(252) : 0;
+  const cagr = ((eq[eq.length-1]/eq[0])**(252/N)-1)*100;
+  let peak=eq[0], maxDD=0;
+  const ddArr = eq.map(v=>{ if(v>peak)peak=v; const d=(v-peak)/peak*100; if(d<maxDD)maxDD=d; return d; });
+  const wins = trades.filter(t=>t.netPnl>0);
+  const winRate = trades.length ? (wins.length/trades.length*100).toFixed(1) : '—';
+
+  // Walk-forward mock
+  const wf = [{period:'2013–2014',bestEntry:2.0,bestExit:0.5,bestWin:60,trainSharpe:0.81,oosSharpe:0.62,oosRet:3.4,oosTrades:8},
+              {period:'2015–2016',bestEntry:1.75,bestExit:0.5,bestWin:60,trainSharpe:0.94,oosSharpe:0.71,oosRet:4.1,oosTrades:11},
+              {period:'2017–2018',bestEntry:2.0,bestExit:0.25,bestWin:40,trainSharpe:1.02,oosSharpe:0.58,oosRet:2.8,oosTrades:9},
+              {period:'2019–2020',bestEntry:2.25,bestExit:0.5,bestWin:60,trainSharpe:0.88,oosSharpe:0.44,oosRet:1.9,oosTrades:7},
+              {period:'2021–2022',bestEntry:2.0,bestExit:0.5,bestWin:90,trainSharpe:0.76,oosSharpe:0.61,oosRet:3.2,oosTrades:10},
+              {period:'2023–2024',bestEntry:1.75,bestExit:0.5,bestWin:60,trainSharpe:0.91,oosSharpe:0.67,oosRet:3.8,oosTrades:12}];
+
+  return { spread, zscore, pA_n, pB_n, equity, ddArr, trades, sharpe, cagr, maxDD, winRate, wf, curZ: zscore[N-1] };
+}
+
+// ── Dates ─────────────────────────────────────────────────────────────────────
+const dates = Array.from({length:N},(_,i)=>{
+  const d=new Date(2023,0,1); d.setDate(d.getDate()+i);
+  return d.toLocaleDateString('en-GB',{month:'short',day:'numeric'});
+});
+
+// ── Chart helpers ──────────────────────────────────────────────────────────────
+const CC = { z:'#888780',entry_s:'#E24B4A',entry_l:'#1D9E75',pA:'#8B7FD4',pB:'#D4A847',eq:'#4A90D9',dd:'#E24B4A',bar:'rgba(74,144,217,0.45)' };
+
+function gridOpts(axFn={}) {
+  return {
+    responsive:true, maintainAspectRatio:false, animation:{duration:200},
+    plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false}},
+    scales:{
+      x:{ticks:{maxTicksLimit:8,maxRotation:0,font:{size:9},color:'#555450'},grid:{color:'rgba(255,255,255,.04)'},border:{display:false},...(axFn.x||{})},
+      y:{ticks:{font:{size:9},color:'#555450'},grid:{color:'rgba(255,255,255,.04)'},border:{display:false},...(axFn.y||{})}
+    }
+  };
+}
+
+function bandPlugin(entryZ,exitZ) {
+  return {id:'bands',beforeDraw(c){
+    const {ctx,chartArea:{left,right},scales:{y}} = c;
+    const bands = [{from:entryZ,to:4,col:'rgba(226,75,74,.07)'},{from:-4,to:-entryZ,col:'rgba(29,158,117,.07)'}];
+    bands.forEach(({from,to,col})=>{
+      const yT=y.getPixelForValue(Math.max(Math.min(to,4),-4));
+      const yB=y.getPixelForValue(Math.max(Math.min(from,4),-4));
+      ctx.fillStyle=col;ctx.fillRect(left,yT,right-left,yB-yT);
+    });
+    [[entryZ,'#E24B4A'],[exitZ,'#1D9E75'],[-entryZ,'#E24B4A'],[-exitZ,'#1D9E75']].forEach(([v,col])=>{
+      const yy=y.getPixelForValue(v);
+      ctx.save();ctx.strokeStyle=col;ctx.lineWidth=1;ctx.setLineDash([4,4]);
+      ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(right,yy);ctx.stroke();ctx.restore();
+    });
+  }};
+}
+
+function makeChart(id,type,data,opts,plugins=[]) {
+  if(charts[id]) charts[id].destroy();
+  charts[id]=new Chart(document.getElementById(id),{type,data,options:opts,plugins});
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render() {
+  const entryZ = parseFloat(document.getElementById('entry-z').value);
+  const exitZ  = parseFloat(document.getElementById('exit-z').value);
+  const win    = parseInt(document.getElementById('z-win').value);
+  const cost   = parseInt(document.getElementById('costs').value);
+
+  const d = genData(currentPair, entryZ, exitZ, win, cost);
+  const p = PAIRS_META[currentPair];
+
+  // Metrics
+  const cz = d.curZ?.toFixed(3) ?? '—';
+  document.getElementById('m-z').textContent = cz;
+  document.getElementById('m-z').className = `val ${d.curZ>=entryZ?'neg':d.curZ<=-entryZ?'pos':'neu'}`;
+  const sigTxt = d.curZ>=entryZ?'SHORT SPREAD':d.curZ<=-entryZ?'LONG SPREAD':'FLAT';
+  const sigCls = d.curZ>=entryZ?'short':d.curZ<=-entryZ?'long':'flat';
+  document.getElementById('m-signal').innerHTML = `<span class="badge badge-${sigCls}">${sigTxt}</span>`;
+  document.getElementById('m-cagr').textContent   = d.cagr.toFixed(1)+'%';
+  document.getElementById('m-cagr').className     = `val ${d.cagr>=0?'pos':'neg'}`;
+  document.getElementById('m-sharpe').textContent = d.sharpe.toFixed(2);
+  document.getElementById('m-sharpe').className   = `val ${d.sharpe>=0?'pos':'neg'}`;
+  document.getElementById('m-dd').textContent     = d.maxDD.toFixed(1)+'%';
+  document.getElementById('m-dd').className       = 'val neg';
+  document.getElementById('m-wr').textContent     = d.winRate+'%';
+  document.getElementById('m-wr').className       = 'val pos';
+  document.getElementById('m-trades').textContent = `${d.trades.length} trades`;
+  document.getElementById('m-hl').textContent     = p.hl+'d';
+  document.getElementById('m-hl').className       = 'val neu';
+
+  // Cointegration cards (all pairs)
+  const cointHTML = PAIRS_META.map((m,i)=>{
+    const cointd = m.eg_p < 0.05;
+    return `<div class="coint-card">
+      <div class="coint-pair">${m.label}</div>
+      <div class="coint-row"><span>Cointegrated</span><span class="coint-val"><span class="badge badge-${cointd?'yes':'no'}">${cointd?'✓ YES':'✗ WEAK'}</span></span></div>
+      <div class="coint-row"><span>EG p-value</span><span class="coint-val">${m.eg_p.toFixed(3)}</span></div>
+      <div class="coint-row"><span>Hedge ratio β</span><span class="coint-val">${m.beta.toFixed(2)}</span></div>
+      <div class="coint-row"><span>Half-life</span><span class="coint-val">${m.hl}d</span></div>
+    </div>`;
+  }).join('');
+  document.getElementById('coint-cards').innerHTML = cointHTML;
+
+  // Z-score chart
+  const aboveE = d.zscore.map(z=>z!=null&&z>=entryZ?z:null);
+  const belowE = d.zscore.map(z=>z!=null&&z<=-entryZ?z:null);
+  makeChart('z-chart','line',{
+    labels:dates,
+    datasets:[
+      {data:d.zscore,borderColor:CC.z,borderWidth:1,pointRadius:0,tension:.3,fill:false},
+      {data:aboveE,borderWidth:0,pointRadius:3,pointBackgroundColor:CC.entry_s,pointBorderWidth:0,fill:false,showLine:false},
+      {data:belowE,borderWidth:0,pointRadius:3,pointBackgroundColor:CC.entry_l,pointBorderWidth:0,fill:false,showLine:false},
+    ]
+  }, gridOpts({y:{ticks:{callback:v=>v.toFixed(1)}}}), [bandPlugin(entryZ,exitZ)]);
+
+  // Spread histogram
+  const validSpread = d.spread.filter(v=>!isNaN(v));
+  const bins=24, mn=Math.min(...validSpread), mx=Math.max(...validSpread), bw=(mx-mn)/bins;
+  const counts=new Array(bins).fill(0);
+  validSpread.forEach(v=>{let b=Math.floor((v-mn)/bw);if(b>=bins)b=bins-1;counts[b]++;});
+  const binL=counts.map((_,i)=>(mn+i*bw+bw/2).toFixed(2));
+  const barCols=counts.map((_,i)=>{const mid=mn+i*bw+bw/2;return Math.abs(mid)>0.05?'rgba(226,75,74,0.55)':'rgba(74,144,217,0.45)';});
+  makeChart('hist-chart','bar',{labels:binL,datasets:[{data:counts,backgroundColor:barCols,borderWidth:0}]},
+    gridOpts({x:{ticks:{maxTicksLimit:6}},y:{ticks:{maxTicksLimit:5}}}));
+
+  // Price chart
+  const tickers = PAIRS_META[currentPair].label.split(' / ');
+  makeChart('price-chart','line',{
+    labels:dates,
+    datasets:[
+      {data:d.pA_n,borderColor:CC.pA,borderWidth:1.5,pointRadius:0,tension:.3,fill:false,label:tickers[0]},
+      {data:d.pB_n,borderColor:CC.pB,borderWidth:1.5,pointRadius:0,tension:.3,fill:false,label:tickers[1]},
+    ]
+  },gridOpts({y:{ticks:{callback:v=>v.toFixed(2)}}}));
+
+  // Equity curve
+  const eqPct = d.equity.map(v=>((v/d.equity[0])-1)*100);
+  makeChart('eq-chart','line',{
+    labels:dates.slice(0,d.equity.length),
+    datasets:[{data:eqPct,borderColor:CC.eq,borderWidth:1.5,pointRadius:0,tension:.3,fill:true,backgroundColor:'rgba(74,144,217,0.08)'}]
+  },gridOpts({y:{ticks:{callback:v=>v.toFixed(1)+'%'}}}));
+
+  // Drawdown
+  makeChart('dd-chart','line',{
+    labels:dates.slice(0,d.ddArr.length),
+    datasets:[{data:d.ddArr,borderColor:CC.dd,borderWidth:1,pointRadius:0,tension:.3,fill:true,backgroundColor:'rgba(226,75,74,0.08)'}]
+  },gridOpts({y:{ticks:{callback:v=>v.toFixed(1)+'%'}}}));
+
+  // Walk-forward table
+  document.getElementById('wf-body').innerHTML = d.wf.map(w=>`
+    <tr>
+      <td>${w.period}</td>
+      <td>±${w.bestEntry}</td>
+      <td>±${w.bestExit}</td>
+      <td>${w.bestWin}d</td>
+      <td class="${w.trainSharpe>=0?'pos':'neg'}">${w.trainSharpe.toFixed(2)}</td>
+      <td class="${w.oosSharpe>=0?'pos':'neg'}">${w.oosSharpe.toFixed(2)}</td>
+      <td class="${w.oosRet>=0?'pos':'neg'}">${w.oosRet>=0?'+':''}${w.oosRet.toFixed(1)}%</td>
+      <td>${w.oosTrades}</td>
+    </tr>`).join('');
+
+  // Trades table
+  document.getElementById('trades-body').innerHTML = d.trades.slice(-8).reverse().map(t=>{
+    const dateE = dates[t.entryI]||'—', dateX = dates[t.exitI]||'—';
+    const pnlCls = t.netPnl>=0?'pos':'neg';
+    return `<tr>
+      <td>${dateE}</td><td>${dateX}</td>
+      <td><span class="badge badge-${t.dir}">${t.dir.toUpperCase()}</span></td>
+      <td>${t.entryZ}</td><td>${t.exitZ}</td><td>${t.days}d</td>
+      <td class="${pnlCls}">${t.netPnl>=0?'+':''}${t.netPnl.toFixed(0)} (${t.netPnl>=0?'+':''}${t.netPct}%)</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Events ────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  currentPair=parseInt(t.dataset.pair);
+  render();
+}));
+
+['entry-z','exit-z','z-win','costs'].forEach(id=>{
+  const el=document.getElementById(id), out=document.getElementById(id+'-v');
+  el.addEventListener('input',()=>{
+    if(id==='costs') out.textContent=el.value;
+    else if(id==='z-win') out.textContent=el.value+'d';
+    else out.textContent='±'+parseFloat(el.value).toFixed(2);
+  });
+});
+
+document.getElementById('run-btn').addEventListener('click', render);
+render();
+</script>
+</body>
+</html>

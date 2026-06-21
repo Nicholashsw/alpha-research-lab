@@ -1,0 +1,15 @@
+Export 8 CSVs from Bloomberg HP and place them in this folder:
+
+  KO.csv      PEP.csv
+  XOM.csv     CVX.csv
+  GS.csv      MS.csv
+  AMZN.csv    TGT.csv
+
+Bloomberg HP settings:
+  - Field: PX_LAST
+  - Periodicity: Daily
+  - Date range: 01/01/2010 → today
+  - Currency: USD
+
+For VECM energy basket also add:
+  SHEL.csv    TTE.csv
