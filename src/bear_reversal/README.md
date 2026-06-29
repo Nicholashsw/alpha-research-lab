@@ -2,8 +2,6 @@
 
 A systematic DCA screener and backtester built around one idea: **only buy when price is meaningfully below its 200-day SMA. Hold cash otherwise.**
 
-Based on the strategy framework from [Demystifying Dollar-Cost Averaging](https://samueljuanp.medium.com/demystifying-dollar-cost-averaging-19b706657a0b) by Samuel Juan.
-
 ---
 
 ## Strategy Logic
